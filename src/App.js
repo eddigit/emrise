@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useParams } from "react-router-dom";
-import { MapPin, Phone, Mail, Instagram, Facebook, ArrowRight, CalendarDays, Users, Search, Minus, Plus, CreditCard, Headphones, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, Bed, Maximize, User, X, Wifi, Car, Waves, Sun, UtensilsCrossed, Wind, Tv, Bath, Coffee, Star, Grid3X3, Share2, Heart, Key, Sparkles, Shield, Clock, Target, Gem, HandHeart, Calendar, BookOpen, Twitter, Linkedin, Upload, Home, Building, Castle, HelpCircle, Check, Send, MessageSquare } from "lucide-react";
+import { MapPin, Phone, Mail, Instagram, Facebook, ArrowRight, CalendarDays, Users, Search, Minus, Plus, CreditCard, Headphones, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, Bed, Maximize, User, X, Wifi, Car, Waves, Sun, UtensilsCrossed, Wind, Tv, Bath, Coffee, Star, Grid3X3, Share2, Heart, Key, Sparkles, Shield, Clock, Target, Gem, Calendar, BookOpen, Twitter, Linkedin, Upload, Home, Building, Castle, HelpCircle, Check, Send, MessageSquare } from "lucide-react"
+const HandHeart = Heart;;
 
 // ===========================================
 // DATA - Properties
