@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { BrowserRouter as Router, Routes, Route, Link, useLocation, useParams } from "react-router-dom";
-import { MapPin, Phone, Mail, Instagram, Facebook, ArrowRight, CalendarDays, Users, Search, Minus, Plus, CreditCard, Headphones, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, Bed, Maximize, User, X, Wifi, Car, Waves, Sun, UtensilsCrossed, Wind, Tv, Bath, Coffee, Star, Grid3X3, Share2, Heart, Key, Sparkles, Shield, Clock, Target, Gem, Calendar, BookOpen, Twitter, Linkedin, Upload, Home, Building, Castle, HelpCircle, Check, Send, MessageSquare } from "lucide-react"
+import { MapPin, Phone, Mail, Instagram, Facebook, ArrowRight, CalendarDays, Users, Search, Minus, Plus, CreditCard, Headphones, BadgeCheck, ChevronDown, ChevronLeft, ChevronRight, Bed, Maximize, User, X, Wifi, Car, Waves, Sun, UtensilsCrossed, Wind, Tv, Bath, Coffee, Star, Grid3X3, Share2, Heart, Key, Sparkles, Shield, Clock, Target, Gem, Calendar, BookOpen, Twitter, Linkedin, Upload, Home, Building, Castle, HelpCircle, Check, Send, MessageSquare, Loader2, AlertCircle } from "lucide-react"
+import { supabase } from './lib/supabase';
 const HandHeart = Heart;;
 
 // ===========================================
@@ -2464,6 +2465,105 @@ const PropertyPage = () => {
   const [guests, setGuests] = useState(2);
   const [guestsDropdownOpen, setGuestsDropdownOpen] = useState(false);
 
+  // Reservation form state
+  const [showReservationForm, setShowReservationForm] = useState(false);
+  const [reservationData, setReservationData] = useState({
+    prenom: '', nom: '', email: '', telephone: '', message: ''
+  });
+  const [reservationStatus, setReservationStatus] = useState(null); // null | 'loading' | 'success' | 'error'
+  const [reservationError, setReservationError] = useState('');
+  const [reservationRef, setReservationRef] = useState('');
+
+  // Supabase logement mapping
+  const [supabaseLogement, setSupabaseLogement] = useState(null);
+  const [blockedDates, setBlockedDates] = useState([]);
+
+  // Map frontend property slugs to Supabase slugs
+  const slugMap = {
+    'le-jardin-de-ponteves': 'jardin-de-ponteves',
+    'jardin-de-ponteves': 'jardin-de-ponteves',
+    'la-suite-26': 'la-suite-26',
+    'villa-cezanne': 'villa-cezanne',
+    'studio-mirabeau': 'studio-mirabeau',
+  };
+
+  // Fetch logement from Supabase
+  useEffect(() => {
+    const fetchLogement = async () => {
+      if (!property) return;
+      const slug = slugMap[property.id] || property.id;
+      const { data } = await supabase
+        .from('logements')
+        .select('*')
+        .eq('slug', slug)
+        .eq('actif', true)
+        .single();
+      if (data) setSupabaseLogement(data);
+    };
+    fetchLogement();
+  }, [property]);
+
+  // Fetch blocked dates
+  useEffect(() => {
+    const fetchDispos = async () => {
+      if (!supabaseLogement) return;
+      try {
+        const res = await fetch(`/api/disponibilites?logement_id=${supabaseLogement.id}`);
+        const json = await res.json();
+        if (json.dates_bloquees) setBlockedDates(json.dates_bloquees);
+      } catch (e) { /* availability check optional */ }
+    };
+    fetchDispos();
+  }, [supabaseLogement]);
+
+  // Check if dates overlap blocked periods
+  const isDatesBlocked = useCallback(() => {
+    if (!checkIn || !checkOut || blockedDates.length === 0) return false;
+    return blockedDates.some(b =>
+      checkIn < b.date_fin && checkOut > b.date_debut
+    );
+  }, [checkIn, checkOut, blockedDates]);
+
+  // Handle reservation submit
+  const handleReservation = async (e) => {
+    e.preventDefault();
+    if (!supabaseLogement) {
+      setReservationError('Logement non configuré pour la réservation en ligne.');
+      setReservationStatus('error');
+      return;
+    }
+    setReservationStatus('loading');
+    setReservationError('');
+    try {
+      const res = await fetch('/api/reservation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          logement_id: supabaseLogement.id,
+          prenom: reservationData.prenom,
+          nom: reservationData.nom,
+          email: reservationData.email,
+          telephone: reservationData.telephone || undefined,
+          date_arrivee: checkIn,
+          date_depart: checkOut,
+          nb_voyageurs: guests,
+          message: reservationData.message || undefined,
+        }),
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setReservationStatus('success');
+        setReservationRef(json.reference);
+      } else {
+        setReservationStatus('error');
+        setReservationError(json.error || 'Une erreur est survenue.');
+      }
+    } catch (err) {
+      setReservationStatus('error');
+      setReservationError('Erreur de connexion. Veuillez réessayer.');
+    }
+  };
+
   // Calculate nights and total price
   const calculateNights = () => {
     if (!checkIn || !checkOut) return 0;
@@ -2716,7 +2816,7 @@ const PropertyPage = () => {
                 </div>
               </div>
 
-              {/* Availability Calendar Placeholder */}
+              {/* Availability Calendar */}
               <div>
                 <h2 className="text-2xl font-serif text-[#2D2A26] mb-6">Disponibilités</h2>
                 <div className="bg-[#FAF8F5] rounded-xl p-6">
@@ -2730,30 +2830,55 @@ const PropertyPage = () => {
                       <span className="text-sm text-[#6B635A]">Indisponible</span>
                     </div>
                   </div>
-                  {/* Calendar Grid */}
-                  <div className="grid grid-cols-7 gap-2 text-center">
-                    {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
-                      <div key={day} className="text-xs font-medium text-[#9A9189] py-2">{day}</div>
-                    ))}
-                    {Array.from({ length: 35 }, (_, i) => {
-                      const isAvailable = Math.random() > 0.3;
-                      const day = (i % 31) + 1;
-                      return (
-                        <div 
-                          key={i} 
-                          className={`py-3 rounded-lg text-sm ${
-                            isAvailable 
-                              ? 'bg-white text-[#2D2A26] hover:bg-[#C9A961] hover:text-white cursor-pointer transition-colors' 
-                              : 'bg-[#E8E0D5] text-[#9A9189] cursor-not-allowed'
-                          }`}
-                        >
-                          {day <= 31 ? day : ''}
+                  {/* Calendar Grid - Current Month */}
+                  {(() => {
+                    const now = new Date();
+                    const year = now.getFullYear();
+                    const month = now.getMonth();
+                    const firstDay = new Date(year, month, 1);
+                    const lastDay = new Date(year, month + 1, 0);
+                    const startDow = (firstDay.getDay() + 6) % 7; // Monday = 0
+                    const daysInMonth = lastDay.getDate();
+                    const monthName = firstDay.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+
+                    const isDateBlocked = (day) => {
+                      const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                      return blockedDates.some(b => dateStr >= b.date_debut && dateStr < b.date_fin);
+                    };
+
+                    return (
+                      <>
+                        <p className="text-center font-serif text-lg text-[#2D2A26] mb-4 capitalize">{monthName}</p>
+                        <div className="grid grid-cols-7 gap-2 text-center">
+                          {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(day => (
+                            <div key={day} className="text-xs font-medium text-[#9A9189] py-2">{day}</div>
+                          ))}
+                          {Array.from({ length: startDow }, (_, i) => (
+                            <div key={`empty-${i}`} className="py-3" />
+                          ))}
+                          {Array.from({ length: daysInMonth }, (_, i) => {
+                            const day = i + 1;
+                            const blocked = isDateBlocked(day);
+                            const isPast = new Date(year, month, day) < new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                            return (
+                              <div
+                                key={day}
+                                className={`py-3 rounded-lg text-sm ${
+                                  blocked || isPast
+                                    ? 'bg-[#E8E0D5] text-[#9A9189] cursor-not-allowed'
+                                    : 'bg-white text-[#2D2A26] hover:bg-[#C9A961] hover:text-white cursor-pointer transition-colors'
+                                }`}
+                              >
+                                {day}
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
+                      </>
+                    );
+                  })()}
                   <p className="text-xs text-[#9A9189] mt-4 text-center">
-                    Calendrier indicatif. Contactez-nous pour vérifier les disponibilités exactes.
+                    {blockedDates.length > 0 ? 'Synchronisé avec les réservations existantes.' : 'Contactez-nous pour vérifier les disponibilités exactes.'}
                   </p>
                 </div>
               </div>
@@ -2904,23 +3029,141 @@ const PropertyPage = () => {
                   </div>
                 )}
 
-                {/* Book Button */}
-                <button 
-                  className="w-full bg-[#2D2A26] text-white py-4 px-6 rounded-lg text-sm tracking-[0.1em] uppercase font-medium hover:bg-[#C9A961] transition-colors duration-300"
-                  data-testid="booking-btn"
-                >
-                  {nights > 0 ? 'Réserver' : 'Vérifier la disponibilité'}
-                </button>
+                {/* Blocked dates warning */}
+                {isDatesBlocked() && (
+                  <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg">
+                    <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                    <p className="text-xs text-red-600">Ces dates ne sont pas disponibles.</p>
+                  </div>
+                )}
 
-                <p className="text-xs text-[#9A9189] text-center mt-4">
-                  Aucun montant ne sera débité pour le moment
-                </p>
+                {/* Book Button */}
+                {!showReservationForm ? (
+                  <button
+                    onClick={() => {
+                      if (nights > 0 && !isDatesBlocked()) setShowReservationForm(true);
+                    }}
+                    disabled={isDatesBlocked()}
+                    className={`w-full py-4 px-6 rounded-lg text-sm tracking-[0.1em] uppercase font-medium transition-colors duration-300 ${
+                      isDatesBlocked()
+                        ? 'bg-[#E8E0D5] text-[#9A9189] cursor-not-allowed'
+                        : 'bg-[#2D2A26] text-white hover:bg-[#C9A961]'
+                    }`}
+                    data-testid="booking-btn"
+                  >
+                    {nights > 0 ? 'Réserver' : 'Choisissez vos dates'}
+                  </button>
+                ) : reservationStatus === 'success' ? (
+                  <div className="text-center space-y-4">
+                    <div className="w-16 h-16 mx-auto bg-green-100 rounded-full flex items-center justify-center">
+                      <Check className="w-8 h-8 text-green-600" />
+                    </div>
+                    <h3 className="font-serif text-xl text-[#2D2A26]">Demande envoyée !</h3>
+                    <p className="text-sm text-[#6B635A]">
+                      Votre référence : <strong className="text-[#C9A961]">{reservationRef}</strong>
+                    </p>
+                    <p className="text-xs text-[#9A9189]">
+                      Un email de confirmation vous a été envoyé. Nous reviendrons vers vous dans les plus brefs délais.
+                    </p>
+                  </div>
+                ) : (
+                  <form onSubmit={handleReservation} className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] tracking-[0.1em] uppercase text-[#9A9189] mb-1">Prénom *</label>
+                        <input
+                          type="text"
+                          required
+                          value={reservationData.prenom}
+                          onChange={(e) => setReservationData(d => ({...d, prenom: e.target.value}))}
+                          className="w-full border border-[#E8E0D5] rounded-lg px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:border-[#C9A961]"
+                          placeholder="Prénom"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] tracking-[0.1em] uppercase text-[#9A9189] mb-1">Nom *</label>
+                        <input
+                          type="text"
+                          required
+                          value={reservationData.nom}
+                          onChange={(e) => setReservationData(d => ({...d, nom: e.target.value}))}
+                          className="w-full border border-[#E8E0D5] rounded-lg px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:border-[#C9A961]"
+                          placeholder="Nom"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] tracking-[0.1em] uppercase text-[#9A9189] mb-1">Email *</label>
+                      <input
+                        type="email"
+                        required
+                        value={reservationData.email}
+                        onChange={(e) => setReservationData(d => ({...d, email: e.target.value}))}
+                        className="w-full border border-[#E8E0D5] rounded-lg px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:border-[#C9A961]"
+                        placeholder="votre@email.com"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] tracking-[0.1em] uppercase text-[#9A9189] mb-1">Téléphone</label>
+                      <input
+                        type="tel"
+                        value={reservationData.telephone}
+                        onChange={(e) => setReservationData(d => ({...d, telephone: e.target.value}))}
+                        className="w-full border border-[#E8E0D5] rounded-lg px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:border-[#C9A961]"
+                        placeholder="+33 6 12 34 56 78"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] tracking-[0.1em] uppercase text-[#9A9189] mb-1">Message</label>
+                      <textarea
+                        rows="3"
+                        value={reservationData.message}
+                        onChange={(e) => setReservationData(d => ({...d, message: e.target.value}))}
+                        className="w-full border border-[#E8E0D5] rounded-lg px-3 py-2 text-sm text-[#2D2A26] focus:outline-none focus:border-[#C9A961] resize-none"
+                        placeholder="Votre message (optionnel)"
+                      />
+                    </div>
+
+                    {reservationStatus === 'error' && (
+                      <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                        <AlertCircle className="w-4 h-4 text-red-500 flex-shrink-0" />
+                        <p className="text-xs text-red-600">{reservationError}</p>
+                      </div>
+                    )}
+
+                    <button
+                      type="submit"
+                      disabled={reservationStatus === 'loading'}
+                      className="w-full bg-[#C9A961] text-white py-4 px-6 rounded-lg text-sm tracking-[0.1em] uppercase font-medium hover:bg-[#2D2A26] transition-colors duration-300 flex items-center justify-center gap-2 disabled:opacity-60"
+                    >
+                      {reservationStatus === 'loading' ? (
+                        <><Loader2 className="w-4 h-4 animate-spin" /> Envoi en cours...</>
+                      ) : (
+                        <><Send className="w-4 h-4" /> Envoyer ma demande</>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setShowReservationForm(false); setReservationStatus(null); }}
+                      className="w-full text-[#9A9189] text-xs hover:text-[#6B635A] transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </form>
+                )}
+
+                {!showReservationForm && reservationStatus !== 'success' && (
+                  <p className="text-xs text-[#9A9189] text-center mt-4">
+                    Aucun montant ne sera débité pour le moment
+                  </p>
+                )}
 
                 {/* Contact */}
                 <div className="border-t border-[#E8E0D5] pt-6 mt-6">
                   <p className="text-sm text-[#6B635A] mb-3">Une question sur ce logement ?</p>
-                  <Link 
-                    to="/contact" 
+                  <Link
+                    to="/contact"
                     className="flex items-center justify-center gap-2 w-full border border-[#2D2A26] text-[#2D2A26] py-3 px-6 rounded-lg text-sm tracking-[0.1em] uppercase font-medium hover:bg-[#2D2A26] hover:text-white transition-colors"
                   >
                     <Phone className="w-4 h-4" />
