@@ -2029,15 +2029,20 @@ const HomePage = () => {
         className="fixed left-1/2 z-[60] pointer-events-none"
         style={{
           top: `${logoTop}px`,
-          transform: 'translateX(-50%)',
-          // NO CSS transition - position is calculated every frame
+          transform: 'translateX(-50%) translateZ(0)',
+          willChange: 'transform, top',
+          backfaceVisibility: 'hidden',
+          WebkitFontSmoothing: 'antialiased',
+          MozOsxFontSmoothing: 'grayscale',
         }}
       >
         <Link to="/" className="pointer-events-auto">
           <span 
             className={`text-2xl lg:text-3xl font-serif tracking-wide ${logoColor}`}
             style={{
-              textShadow: isInHeader ? 'none' : '0 2px 15px rgba(0,0,0,0.4)'
+              textShadow: isInHeader ? 'none' : '0 2px 15px rgba(0,0,0,0.4)',
+              WebkitFontSmoothing: 'antialiased',
+              MozOsxFontSmoothing: 'grayscale',
             }}
           >
             EmiRise
